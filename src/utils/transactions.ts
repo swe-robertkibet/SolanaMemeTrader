@@ -21,9 +21,8 @@ export async function fetchTransactionDetails(signature: string): Promise<Displa
             return null;
         }
 
-        // Create the request URL with proper formatting
-        // const url = `${apiEndpoint}/v1/transactions/?api-key=${apiKey}`;
         const url = `${apiEndpoint}/v0/transactions/?api-key=${apiKey}`;
+        
         console.log('Fetching transaction details for signature:', signature);
         
         const response = await axios.post(url, {
@@ -34,7 +33,17 @@ export async function fetchTransactionDetails(signature: string): Promise<Displa
             }
         });
 
-        if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
+        // Log the raw response for debugging
+        console.log('Raw API response:', JSON.stringify(response.data, null, 2));
+
+        // Check if response is an empty array
+        if (Array.isArray(response.data) && response.data.length === 0) {
+            console.log('No transaction data found for signature:', signature);
+            return null;
+        }
+
+        // Check for invalid response format
+        if (!Array.isArray(response.data) || !response.data[0]) {
             console.error('Invalid response format:', response.data);
             return null;
         }
@@ -44,6 +53,9 @@ export async function fetchTransactionDetails(signature: string): Promise<Displa
         // Extract token information
         const solMint = config.liquidity_pool.wsol_pc_mint;
         let tokenMint = '';
+
+        // Add debug logging for accountData
+        console.log('Transaction account data:', JSON.stringify(transactionData.accountData, null, 2));
 
         // Parse the transaction data to find the token mint
         if (transactionData.accountData) {
@@ -56,7 +68,7 @@ export async function fetchTransactionDetails(signature: string): Promise<Displa
         }
 
         if (!tokenMint) {
-            console.error('Could not find token mint in transaction');
+            console.log('Could not find token mint in transaction');
             return null;
         }
 
@@ -84,7 +96,6 @@ export async function fetchTransactionDetails(signature: string): Promise<Displa
         return null;
     }
 }
-
 export async function createSwapTransactions(solMint: string, tokenMint: string): Promise<string | null> {
     const quoteUrl = process.env.JUP_HTTPS_QUOTE_URI || "";
     const swapUrl = process.env.JUP_HTTPS_SWAP_URI || "";
