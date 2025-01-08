@@ -12,23 +12,75 @@ const RETRY_TIMEOUT = config.tx.get_retry_timeout;
 const RETRY_INTERVAL = config.tx.get_retry_interval;
 
 export async function fetchTransactionDetails(signature: string): Promise<DisplayDataItem | null> {
-    const heliusUri = process.env.HELIUS_HTTPS_URI_TX || "";
-    
     try {
-        const response = await axios.get<TransactionDetailsResponseArray[]>(`${heliusUri}${signature}`);
+        const apiEndpoint = process.env.HELIUS_API_ENDPOINT;
+        const apiKey = process.env.HELIUS_API_KEY;
+        
+        if (!apiEndpoint || !apiKey) {
+            console.error('Missing required Helius configuration in .env file');
+            return null;
+        }
+
+        // Create the request URL with proper formatting
+        // const url = `${apiEndpoint}/v1/transactions/?api-key=${apiKey}`;
+        const url = `${apiEndpoint}/v0/transactions/?api-key=${apiKey}`;
+        console.log('Fetching transaction details for signature:', signature);
+        
+        const response = await axios.post(url, {
+            transactions: [signature]
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
         if (!response.data || !Array.isArray(response.data) || response.data.length === 0) {
-            console.error('Invalid transaction details response');
+            console.error('Invalid response format:', response.data);
             return null;
         }
 
         const transactionData = response.data[0];
+        
+        // Extract token information
+        const solMint = config.liquidity_pool.wsol_pc_mint;
+        let tokenMint = '';
+
+        // Parse the transaction data to find the token mint
+        if (transactionData.accountData) {
+            for (const account of transactionData.accountData) {
+                if (account.account === 'mint' && account.nativeBalance) {
+                    tokenMint = account.account;
+                    break;
+                }
+            }
+        }
+
+        if (!tokenMint) {
+            console.error('Could not find token mint in transaction');
+            return null;
+        }
+
         return {
-            solMint: transactionData.solMint,
-            tokenMint: transactionData.tokenMint,
+            solMint,
+            tokenMint,
             timestamp: Date.now()
         };
+
     } catch (error) {
-        console.error('Error fetching transaction details:', error);
+        if (axios.isAxiosError(error)) {
+            if (error.response?.status === 401) {
+                console.error('\nHelius API Authentication failed:');
+                console.error('Please make sure to:');
+                console.error('1. Get your API key from https://dev.helius.xyz/dashboard');
+                console.error('2. Add it to your .env file as HELIUS_API_KEY=your_api_key_here');
+                console.error('3. Check if your API key has sufficient credits\n');
+                console.error('Current API response:', error.response?.data);
+            } else {
+                console.error('API Error:', error.response?.status, error.response?.data);
+            }
+        } else {
+            console.error('Unexpected error:', error);
+        }
         return null;
     }
 }

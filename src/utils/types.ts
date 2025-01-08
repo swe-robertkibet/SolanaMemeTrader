@@ -1,5 +1,3 @@
-import { PublicKey } from '@solana/web3.js';
-
 export interface WebSocketRequest {
     jsonrpc: string;
     id: number;
@@ -15,8 +13,17 @@ export interface WebSocketRequest {
 }
 
 export interface TransactionDetailsResponseArray {
-    solMint: string;
-    tokenMint: string;
+    tokenTransfers?: Array<{
+        fromUserAccount: string;
+        toUserAccount: string;
+        mint: string;
+        amount: number;
+    }>;
+    nativeTransfers?: Array<{
+        fromUserAccount: string;
+        toUserAccount: string;
+        amount: number;
+    }>;
 }
 
 export interface DisplayDataItem {
