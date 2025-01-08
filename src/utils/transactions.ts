@@ -11,7 +11,7 @@ dotenv.config();
 const RETRY_TIMEOUT = config.tx.get_retry_timeout;
 const RETRY_INTERVAL = config.tx.get_retry_interval;
 
-export async function fetchTransactionDetails(signature: string): Promise<DisplayDataItem | null> {
+export async function fetchTransactionDetails(signature: string, retries = 3, delay = 1000): Promise<DisplayDataItem | null> {
     try {
         const apiEndpoint = process.env.HELIUS_API_ENDPOINT;
         const apiKey = process.env.HELIUS_API_KEY;
@@ -36,28 +36,23 @@ export async function fetchTransactionDetails(signature: string): Promise<Displa
         // Log the raw response for debugging
         console.log('Raw API response:', JSON.stringify(response.data, null, 2));
 
-        // Check if response is an empty array
+        // If response is empty and we have retries left, wait and try again
         if (Array.isArray(response.data) && response.data.length === 0) {
-            console.log('No transaction data found for signature:', signature);
-            return null;
+            if (retries > 0) {
+                console.log(`No data found, retrying in ${delay}ms... (${retries} retries left)`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return fetchTransactionDetails(signature, retries - 1, delay);
+            } else {
+                console.log('No transaction data found after all retries:', signature);
+                return null;
+            }
         }
 
-        // Check for invalid response format
-        if (!Array.isArray(response.data) || !response.data[0]) {
-            console.error('Invalid response format:', response.data);
-            return null;
-        }
-
+        // Rest of the function remains the same...
         const transactionData = response.data[0];
-        
-        // Extract token information
         const solMint = config.liquidity_pool.wsol_pc_mint;
         let tokenMint = '';
 
-        // Add debug logging for accountData
-        console.log('Transaction account data:', JSON.stringify(transactionData.accountData, null, 2));
-
-        // Parse the transaction data to find the token mint
         if (transactionData.accountData) {
             for (const account of transactionData.accountData) {
                 if (account.account === 'mint' && account.nativeBalance) {
@@ -79,6 +74,12 @@ export async function fetchTransactionDetails(signature: string): Promise<Displa
         };
 
     } catch (error) {
+        if (retries > 0) {
+            console.log(`Error occurred, retrying in ${delay}ms... (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return fetchTransactionDetails(signature, retries - 1, delay);
+        }
+
         if (axios.isAxiosError(error)) {
             if (error.response?.status === 401) {
                 console.error('\nHelius API Authentication failed:');
